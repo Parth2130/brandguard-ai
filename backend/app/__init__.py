@@ -56,6 +56,28 @@ def create_app(config_class=Config):
             'database': 'connected'
         })
 
+    # Serve compiled React frontend in production
+    frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'dist'))
+
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_frontend(path):
+        if path.startswith('api/') or path == 'api':
+            return jsonify({'error': 'Endpoint not found'}), 404
+        if path.startswith('uploads/'):
+            return send_from_directory(Config.UPLOAD_FOLDER, path[8:])
+        file_path = os.path.join(frontend_dist, path)
+        if path != "" and os.path.exists(file_path):
+            return send_from_directory(frontend_dist, path)
+        if os.path.exists(os.path.join(frontend_dist, 'index.html')):
+            return send_from_directory(frontend_dist, 'index.html')
+        return jsonify({
+            'status': 'healthy',
+            'product': 'BrandGuard AI API',
+            'message': 'API is running. Build frontend with `npm run build` in /frontend for unified view.'
+        })
+
+
     # Create tables and auto-seed demo data if clean database
     with app.app_context():
         db.create_all()
