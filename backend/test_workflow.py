@@ -6,6 +6,13 @@ import sys
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
+# Ensure backend directory and venv site-packages are in sys.path
+backend_dir = os.path.abspath(os.path.dirname(__file__))
+venv_site = os.path.join(backend_dir, 'venv', 'Lib', 'site-packages')
+if os.path.exists(venv_site) and venv_site not in sys.path:
+    sys.path.insert(0, venv_site)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
 from app import create_app
 from app.models import db, User, UploadedContent, AnalysisResult, DetectedIssue, ReviewRequest

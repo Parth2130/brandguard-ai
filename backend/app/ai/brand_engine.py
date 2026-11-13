@@ -340,9 +340,10 @@ class BrandAnalysisEngine:
     @classmethod
     def _run_gemini_analysis(cls, api_key, text, dominant_colors, content_record, organization, rules, assets, products, guidelines, categories):
         """
-        Executes Gemini 1.5 Flash API with structured JSON output enforcing BrandGuard schema.
+        Executes Google Gemini API with structured JSON output enforcing BrandGuard schema.
         """
-        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        model = getattr(Config, 'GEMINI_MODEL', 'gemini-2.5-flash') or 'gemini-2.5-flash'
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         
         rules_context = [f"- [{r.rule_type.upper()}] {r.rule_key}: {r.rule_value} (Severity: {r.severity})" for r in rules]
         products_context = [f"- Product: {p.product_name}, Approved Claims: {p.approved_claims}, Specs: {p.specifications}" for p in products]

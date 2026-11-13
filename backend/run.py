@@ -1,8 +1,13 @@
 import os
 import sys
 
-# Ensure current directory is in sys.path
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+# Ensure current directory and venv site-packages are in sys.path
+backend_dir = os.path.abspath(os.path.dirname(__file__))
+venv_site = os.path.join(backend_dir, 'venv', 'Lib', 'site-packages')
+if os.path.exists(venv_site) and venv_site not in sys.path:
+    sys.path.insert(0, venv_site)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
 from app import create_app
 

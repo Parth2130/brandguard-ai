@@ -164,7 +164,8 @@ export const SettingsPage = () => {
                 onChange={(e) => setGeminiModel(e.target.value)}
                 className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-2.5 text-xs font-semibold text-[#2E2459]"
               >
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ultra-fast, Recommended)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Latest, Recommended)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ultra-fast)</option>
                 <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep Reasoning)</option>
               </select>
             </div>
