@@ -174,9 +174,13 @@ class ProductInfo(db.Model):
     category = db.Column(db.String(80), default='Core Product')
     specifications = db.Column(db.Text, default='')
     approved_claims = db.Column(db.Text, default='') # verified marketing claim statements
+    verified_benchmarks = db.Column(db.Text, default='') # verified benchmark metrics (e.g. 25% performance improvement)
+    official_sla = db.Column(db.Text, default='') # official SLA promises (e.g. 99.99% uptime, <1ms latency)
+    prohibited_claims = db.Column(db.Text, default='') # outdated or forbidden claims (e.g. 100% performance, zero risk)
     source_doc = db.Column(db.String(150), default='')
     effective_date = db.Column(db.String(50), default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
         return {
@@ -186,9 +190,13 @@ class ProductInfo(db.Model):
             'category': self.category,
             'specifications': self.specifications,
             'approved_claims': self.approved_claims,
+            'verified_benchmarks': self.verified_benchmarks,
+            'official_sla': self.official_sla,
+            'prohibited_claims': self.prohibited_claims,
             'source_doc': self.source_doc,
             'effective_date': self.effective_date,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 
@@ -270,6 +278,15 @@ class AnalysisResult(db.Model):
             recs = json.loads(self.recommendations_json) if self.recommendations_json else []
         except Exception:
             recs = []
+        try:
+            raw_data = json.loads(self.raw_response_json) if self.raw_response_json else {}
+        except Exception:
+            raw_data = {}
+        c_records = ClaimVerificationResult.query.filter_by(analysis_id=self.id).all()
+        if not c_records and self.content_id:
+            c_records = ClaimVerificationResult.query.filter_by(content_id=self.content_id).all()
+        claims_list = [c.to_dict() for c in c_records] if c_records else raw_data.get('classified_claims', [])
+
         return {
             'id': self.id,
             'content_id': self.content_id,
@@ -279,6 +296,8 @@ class AnalysisResult(db.Model):
             'overall_status': self.overall_status,
             'analysis_categories': cats,
             'recommendations': recs,
+            'classified_claims': claims_list,
+            'visual_audit': raw_data.get('visual_audit', None),
             'issues': [issue.to_dict() for issue in self.issues],
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
@@ -392,22 +411,30 @@ class ReviewComment(db.Model):
     review_id = db.Column(db.Integer, db.ForeignKey('review_requests.id'), nullable=False)
     content_id = db.Column(db.Integer, db.ForeignKey('uploaded_content.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    parent_comment_id = db.Column(db.Integer, db.ForeignKey('review_comments.id'), nullable=True)
     comment_text = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     author = db.relationship('User', backref='comments')
+    replies = db.relationship('ReviewComment', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade='all, delete-orphan')
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_replies=True):
+        data = {
             'id': self.id,
             'review_id': self.review_id,
             'content_id': self.content_id,
+            'parent_comment_id': self.parent_comment_id,
             'user_id': self.user_id,
             'user_name': self.author.full_name if self.author else 'User',
             'user_role': self.author.role if self.author else '',
             'comment_text': self.comment_text,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+        if include_replies:
+            data['replies'] = [r.to_dict(include_replies=True) for r in self.replies]
+        return data
 
 
 class RevisionHistory(db.Model):
@@ -446,9 +473,16 @@ class ActivityLog(db.Model):
     target_type = db.Column(db.String(50), default='')
     target_id = db.Column(db.Integer, nullable=True)
     details_json = db.Column(db.Text, default='{}')
+    previous_hash = db.Column(db.String(64), default='')
+    event_hash = db.Column(db.String(64), default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='activities')
+
+    def calculate_hash(self, prev_hash=''):
+        import hashlib
+        payload = f"{prev_hash}|{self.organization_id}|{self.user_id}|{self.action}|{self.target_type}|{self.target_id}|{self.details_json}|{self.created_at}"
+        return hashlib.sha256(payload.encode('utf-8')).hexdigest()
 
     def to_dict(self):
         try:
@@ -464,5 +498,87 @@ class ActivityLog(db.Model):
             'target_type': self.target_type,
             'target_id': self.target_id,
             'details': details,
+            'previous_hash': self.previous_hash,
+            'event_hash': self.event_hash,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class ClaimVerificationResult(db.Model):
+    __tablename__ = 'claim_verification_results'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+    content_id = db.Column(db.Integer, db.ForeignKey('uploaded_content.id'), nullable=True)
+    analysis_id = db.Column(db.Integer, db.ForeignKey('analysis_results.id'), nullable=True)
+    claim_text = db.Column(db.Text, nullable=False)
+    classification = db.Column(db.String(40), default='NEEDS_HUMAN_REVIEW') # VERIFIED, UNSUPPORTED, CONTRADICTED, NEEDS_HUMAN_REVIEW
+    product_name = db.Column(db.String(120), default='')
+    verified_benchmark = db.Column(db.Text, default='')
+    explanation = db.Column(db.Text, default='')
+    suggested_correction = db.Column(db.Text, default='')
+    source_reference = db.Column(db.String(255), default='')
+    confidence = db.Column(db.Float, default=0.95)
+    is_overridden = db.Column(db.Boolean, default=False)
+    override_reason = db.Column(db.Text, default='')
+    overridden_by_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'organization_id': self.organization_id,
+            'content_id': self.content_id,
+            'analysis_id': self.analysis_id,
+            'claim_text': self.claim_text,
+            'classification': self.classification,
+            'product_name': self.product_name,
+            'verified_benchmark': self.verified_benchmark,
+            'explanation': self.explanation,
+            'suggested_correction': self.suggested_correction,
+            'source_reference': self.source_reference,
+            'confidence': round(self.confidence, 2) if self.confidence else 0.95,
+            'is_overridden': self.is_overridden,
+            'override_reason': self.override_reason,
+            'overridden_by_id': self.overridden_by_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class VisualAuditResult(db.Model):
+    __tablename__ = 'visual_audit_results'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+    content_id = db.Column(db.Integer, db.ForeignKey('uploaded_content.id'), nullable=False)
+    image_url = db.Column(db.String(255), nullable=False)
+    corrected_image_url = db.Column(db.String(255), default='')
+    dominant_colors_json = db.Column(db.Text, default='[]')
+    approved_palette_json = db.Column(db.Text, default='[]')
+    unapproved_colors_json = db.Column(db.Text, default='[]')
+    contrast_warnings_json = db.Column(db.Text, default='[]')
+    recolor_history_json = db.Column(db.Text, default='[]')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    content = db.relationship('UploadedContent', backref=db.backref('visual_audits', lazy=True, cascade='all, delete-orphan'))
+
+    def to_dict(self):
+        def parse_json(val, default):
+            try:
+                return json.loads(val) if val else default
+            except Exception:
+                return default
+
+        return {
+            'id': self.id,
+            'organization_id': self.organization_id,
+            'content_id': self.content_id,
+            'image_url': self.image_url,
+            'corrected_image_url': self.corrected_image_url,
+            'dominant_colors': parse_json(self.dominant_colors_json, []),
+            'approved_palette': parse_json(self.approved_palette_json, []),
+            'unapproved_colors': parse_json(self.unapproved_colors_json, []),
+            'contrast_warnings': parse_json(self.contrast_warnings_json, []),
+            'recolor_history': parse_json(self.recolor_history_json, []),
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

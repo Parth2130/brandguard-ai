@@ -13,7 +13,7 @@ class Config:
     # Upload settings
     UPLOAD_FOLDER = BASE_DIR / 'uploads'
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25 MB max limit
-    ALLOWED_EXTENSIONS = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'txt'}
+    ALLOWED_EXTENSIONS = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'txt', 'webp', 'svg'}
     
     # AI API settings
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')

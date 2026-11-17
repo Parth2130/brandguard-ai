@@ -88,17 +88,32 @@ export const correctionsAPI = {
   accept: (id) => api.post(`/suggestions/${id}/accept`),
   reject: (id) => api.post(`/suggestions/${id}/reject`),
   edit: (id, data) => api.post(`/suggestions/${id}/edit`, data),
-  applyAll: (contentId) => api.post(`/suggestions/content/${contentId}/apply-all`)
+  applyAll: (contentId) => api.post(`/suggestions/content/${contentId}/apply-all`),
+  reanalyze: (contentId) => api.post(`/suggestions/content/${contentId}/reanalyze`)
 };
 
 export const reviewsAPI = {
   list: (params) => api.get('/reviews', { params }),
   get: (id) => api.get(`/reviews/${id}`),
+  getReviewers: () => api.get('/reviews/reviewers'),
   submit: (data) => api.post('/reviews/submit', data),
   approve: (id, data) => api.post(`/reviews/${id}/approve`, data || {}),
   reject: (id, data) => api.post(`/reviews/${id}/reject`, data || {}),
   requestChanges: (id, data) => api.post(`/reviews/${id}/request-changes`, data || {}),
+  getComments: (id) => api.get(`/reviews/${id}/comments`),
   addComment: (id, data) => api.post(`/reviews/${id}/comments`, data)
+};
+
+export const claimsAPI = {
+  getProducts: () => api.get('/claims/products'),
+  verify: (data) => api.post('/claims/verify', data),
+  getContentClaims: (contentId) => api.get(`/claims/content/${contentId}`),
+  override: (claimId, data) => api.post(`/claims/${claimId}/override`, data)
+};
+
+export const visualAuditAPI = {
+  get: (contentId) => api.get(`/visual-audit/${contentId}`),
+  recolor: (contentId, data) => api.post(`/visual-audit/${contentId}/recolor`, data)
 };
 
 export const analyticsAPI = {

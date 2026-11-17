@@ -29,7 +29,6 @@ wheels/
 backend/brandguard.db
 backend/uploads/*
 !backend/uploads/.gitkeep
-!backend/uploads/*.png
 
 # Environment
 .env

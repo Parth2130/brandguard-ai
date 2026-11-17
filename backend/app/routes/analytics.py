@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, g, Response
 from sqlalchemy import func
 from ..models import (
     db, UploadedContent, AnalysisResult, DetectedIssue,
-    ReviewRequest
+    ReviewRequest, User
 )
 from ..middleware.auth_middleware import login_required
 
@@ -23,11 +23,16 @@ def get_analytics_overview():
 
     approved_count = UploadedContent.query.filter_by(organization_id=org_id, status='APPROVED').count()
     rejected_count = UploadedContent.query.filter_by(organization_id=org_id, status='REJECTED').count()
+    changes_requested_count = UploadedContent.query.filter(
+        UploadedContent.organization_id == org_id,
+        UploadedContent.status.in_(['CHANGES_REQUESTED', 'REVISION_REQUESTED'])
+    ).count()
     pending_count = ReviewRequest.query.filter_by(organization_id=org_id, status='PENDING_REVIEW').count()
 
-    total_decided = approved_count + rejected_count
+    total_decided = approved_count + rejected_count + changes_requested_count
     approval_rate = round((approved_count / total_decided * 100), 1) if total_decided > 0 else 100.0
     rejection_rate = round((rejected_count / total_decided * 100), 1) if total_decided > 0 else 0.0
+    changes_requested_rate = round((changes_requested_count / total_decided * 100), 1) if total_decided > 0 else 0.0
 
     avg_score = db.session.query(func.avg(AnalysisResult.compliance_score)).filter(
         AnalysisResult.organization_id == org_id
@@ -47,16 +52,45 @@ def get_analytics_overview():
         if s in sev_dict:
             sev_dict[s] = c
 
+    # Reviewer activity breakdown from real database
+    reviewers = User.query.filter(
+        User.organization_id == org_id,
+        User.role.in_(['BRAND_REVIEWER', 'ADMIN'])
+    ).all()
+
+    reviewer_activity = []
+    for r in reviewers:
+        approved = ReviewRequest.query.filter_by(organization_id=org_id, reviewer_id=r.id, status='APPROVED').count()
+        rejected = ReviewRequest.query.filter_by(organization_id=org_id, reviewer_id=r.id, status='REJECTED').count()
+        changes = ReviewRequest.query.filter(
+            ReviewRequest.organization_id == org_id,
+            ReviewRequest.reviewer_id == r.id,
+            ReviewRequest.status.in_(['CHANGES_REQUESTED', 'REVISION_REQUESTED'])
+        ).count()
+        total_actions = approved + rejected + changes
+        reviewer_activity.append({
+            'reviewer_id': r.id,
+            'name': r.full_name,
+            'role': r.role,
+            'total_reviewed': total_actions,
+            'approved': approved,
+            'rejected': rejected,
+            'changes_requested': changes
+        })
+
     return jsonify({
         'total_uploads': total_uploads,
         'total_analyzed': total_analyzed,
         'approved_count': approved_count,
         'rejected_count': rejected_count,
+        'changes_requested_count': changes_requested_count,
         'pending_count': pending_count,
         'approval_rate': approval_rate,
         'rejection_rate': rejection_rate,
+        'changes_requested_rate': changes_requested_rate,
         'average_compliance_score': compliance_score,
-        'severity_breakdown': sev_dict
+        'severity_breakdown': sev_dict,
+        'reviewer_activity': reviewer_activity
     })
 
 @analytics_bp.route('/violations', methods=['GET'])
@@ -64,7 +98,6 @@ def get_analytics_overview():
 def get_common_violations():
     org_id = g.organization_id
 
-    # Group by issue title for top repeated violations
     top_issues = db.session.query(
         DetectedIssue.title,
         DetectedIssue.category,
@@ -76,7 +109,6 @@ def get_common_violations():
         DetectedIssue.title, DetectedIssue.category, DetectedIssue.severity
     ).order_by(func.count(DetectedIssue.id).desc()).limit(8).all()
 
-    # Category breakdown
     cat_counts = db.session.query(
         DetectedIssue.category,
         func.count(DetectedIssue.id)
@@ -105,7 +137,7 @@ def get_trends():
     org_id = g.organization_id
     results = AnalysisResult.query.filter_by(
         organization_id=org_id
-    ).order_by(AnalysisResult.created_at.asc()).limit(20).all()
+    ).order_by(AnalysisResult.created_at.asc()).limit(30).all()
 
     trend_points = [
         {
@@ -116,7 +148,27 @@ def get_trends():
         } for r in results
     ]
 
-    return jsonify({'trend_points': trend_points})
+    # Calculate monthly aggregated compliance trends
+    from collections import defaultdict
+    monthly = defaultdict(list)
+    for r in results:
+        if r.created_at:
+            m_key = r.created_at.strftime('%Y-%m')
+            monthly[m_key].append(r.compliance_score)
+
+    monthly_trends = [
+        {
+            'month': m,
+            'average_score': round(sum(scores) / len(scores), 1) if scores else 100.0,
+            'volume': len(scores)
+        }
+        for m, scores in sorted(monthly.items())
+    ]
+
+    return jsonify({
+        'trend_points': trend_points,
+        'monthly_trends': monthly_trends
+    })
 
 @analytics_bp.route('/export', methods=['GET'])
 @login_required

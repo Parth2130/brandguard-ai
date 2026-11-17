@@ -17,7 +17,58 @@ from .routes.reviews import reviews_bp
 from .routes.analytics import analytics_bp
 from .routes.users import users_bp
 from .routes.settings import settings_bp
+from .routes.claims import claims_bp
+from .routes.visual_audit import visual_audit_bp
 from .services.seed_data import seed_technova_demo
+
+def apply_schema_migrations(app):
+    """Safely apply schema migrations for existing SQLite databases without destroying data."""
+    with app.app_context():
+        db.create_all()
+        from sqlalchemy import text
+        try:
+            with db.engine.connect() as conn:
+                # 1. product_information
+                res = conn.execute(text("PRAGMA table_info(product_information)")).fetchall()
+                cols = [r[1] for r in res]
+                if 'verified_benchmarks' not in cols:
+                    conn.execute(text("ALTER TABLE product_information ADD COLUMN verified_benchmarks TEXT DEFAULT ''"))
+                if 'official_sla' not in cols:
+                    conn.execute(text("ALTER TABLE product_information ADD COLUMN official_sla TEXT DEFAULT ''"))
+                if 'prohibited_claims' not in cols:
+                    conn.execute(text("ALTER TABLE product_information ADD COLUMN prohibited_claims TEXT DEFAULT ''"))
+                if 'updated_at' not in cols:
+                    conn.execute(text("ALTER TABLE product_information ADD COLUMN updated_at DATETIME"))
+
+                # 2. review_comments
+                res = conn.execute(text("PRAGMA table_info(review_comments)")).fetchall()
+                cols = [r[1] for r in res]
+                if 'parent_comment_id' not in cols:
+                    conn.execute(text("ALTER TABLE review_comments ADD COLUMN parent_comment_id INTEGER"))
+                if 'updated_at' not in cols:
+                    conn.execute(text("ALTER TABLE review_comments ADD COLUMN updated_at DATETIME"))
+
+                # 3. activity_logs
+                res = conn.execute(text("PRAGMA table_info(activity_logs)")).fetchall()
+                cols = [r[1] for r in res]
+                if 'previous_hash' not in cols:
+                    conn.execute(text("ALTER TABLE activity_logs ADD COLUMN previous_hash VARCHAR(64) DEFAULT ''"))
+                if 'event_hash' not in cols:
+                    conn.execute(text("ALTER TABLE activity_logs ADD COLUMN event_hash VARCHAR(64) DEFAULT ''"))
+
+                # 4. claim_verification_results
+                res = conn.execute(text("PRAGMA table_info(claim_verification_results)")).fetchall()
+                cols = [r[1] for r in res]
+                if 'is_overridden' not in cols:
+                    conn.execute(text("ALTER TABLE claim_verification_results ADD COLUMN is_overridden BOOLEAN DEFAULT 0"))
+                if 'override_reason' not in cols:
+                    conn.execute(text("ALTER TABLE claim_verification_results ADD COLUMN override_reason TEXT DEFAULT ''"))
+                if 'overridden_by_id' not in cols:
+                    conn.execute(text("ALTER TABLE claim_verification_results ADD COLUMN overridden_by_id INTEGER"))
+
+                conn.commit()
+        except Exception as e:
+            app.logger.warning(f"Schema migration notice: {e}")
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -40,6 +91,8 @@ def create_app(config_class=Config):
     app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
     app.register_blueprint(users_bp, url_prefix='/api/users')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
+    app.register_blueprint(claims_bp, url_prefix='/api/claims')
+    app.register_blueprint(visual_audit_bp, url_prefix='/api/visual-audit')
 
     # Serve static uploaded files safely
     @app.route('/uploads/<path:filename>')
@@ -77,11 +130,9 @@ def create_app(config_class=Config):
             'message': 'API is running. Build frontend with `npm run build` in /frontend for unified view.'
         })
 
-
-    # Create tables and auto-seed demo data if clean database
+    # Apply database migrations and seed TechNova demo data
+    apply_schema_migrations(app)
     with app.app_context():
-        db.create_all()
-        # Seed TechNova demo data if empty
         seed_technova_demo()
 
     return app

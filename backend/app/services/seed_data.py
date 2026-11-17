@@ -12,6 +12,19 @@ def seed_technova_demo():
     # Check if TechNova exists
     org = Organization.query.filter_by(name='TechNova Solutions').first()
     if org:
+        # Ensure Round 3 benchmark fields are populated on existing demo products
+        p1 = ProductInfo.query.filter_by(organization_id=org.id, product_name='NovaEngine 3.0').first()
+        if p1 and not p1.verified_benchmarks:
+            p1.verified_benchmarks = '25% performance improvement'
+            p1.official_sla = '99.99% system availability, 10ms P99 latency'
+            p1.prohibited_claims = '100% improved performance, zero risk, 100% guaranteed'
+            db.session.commit()
+        p2 = ProductInfo.query.filter_by(organization_id=org.id, product_name='NovaSecure AI').first()
+        if p2 and not p2.verified_benchmarks:
+            p2.verified_benchmarks = 'Sub-millisecond threat detection latency'
+            p2.official_sla = '99.99% enterprise uptime SLA'
+            p2.prohibited_claims = '100% unhackable, zero breach guarantee'
+            db.session.commit()
         return org
 
     # 1. Create Organization
@@ -105,6 +118,9 @@ def seed_technova_demo():
             'Distributed Cloud Engine',
             'High-throughput real-time stream analytics with 10ms P99 latency.',
             'Our product delivers 25% improved performance over standard compute clusters.',
+            '25% performance improvement',
+            '99.99% system availability, 10ms P99 latency',
+            '100% improved performance, zero risk, 100% guaranteed',
             'TechNova Benchmark Tech Report 2026-Q1 (Audited)',
             '2026-01-15'
         ),
@@ -113,17 +129,23 @@ def seed_technova_demo():
             'Cybersecurity Suite',
             'Zero-trust packet inspection and multi-tenant cryptographic isolation.',
             'Guaranteed 99.99% enterprise uptime SLA with zero-trust perimeter enforcement.',
+            'Sub-millisecond threat detection latency',
+            '99.99% enterprise uptime SLA',
+            '100% unhackable, zero breach guarantee',
             'SLA Master Agreement 2026',
             '2026-02-01'
         )
     ]
-    for pname, cat, specs, claims, src, eff in products:
+    for pname, cat, specs, claims, benchmarks, sla, prohibited, src, eff in products:
         pi = ProductInfo(
             organization_id=org.id,
             product_name=pname,
             category=cat,
             specifications=specs,
             approved_claims=claims,
+            verified_benchmarks=benchmarks,
+            official_sla=sla,
+            prohibited_claims=prohibited,
             source_doc=src,
             effective_date=eff
         )

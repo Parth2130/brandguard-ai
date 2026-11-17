@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, g
 from ..models import (
     db, UploadedContent, AnalysisResult, DetectedIssue,
     CorrectionSuggestion, BrandRule, BrandAsset, ProductInfo,
-    BrandGuideline, ActivityLog
+    BrandGuideline, ActivityLog, ClaimVerificationResult, VisualAuditResult
 )
 from ..middleware.auth_middleware import login_required
 from ..ai.brand_engine import BrandAnalysisEngine
@@ -100,21 +100,59 @@ def run_analysis(content_id):
         )
         db.session.add(cs)
 
+    # Save Claim Verification Results
+    classified_claims = raw_result.get('classified_claims', [])
+    for claim_data in classified_claims:
+        cvr = ClaimVerificationResult(
+            organization_id=g.organization_id,
+            content_id=content.id,
+            analysis_id=analysis.id,
+            claim_text=claim_data.get('claim_text', ''),
+            classification=claim_data.get('classification', 'NEEDS_HUMAN_REVIEW'),
+            product_name=claim_data.get('product_name', ''),
+            verified_benchmark=claim_data.get('verified_benchmark', ''),
+            explanation=claim_data.get('explanation', ''),
+            suggested_correction=claim_data.get('suggested_correction', ''),
+            source_reference=claim_data.get('source_reference', ''),
+            confidence=claim_data.get('confidence', 0.95)
+        )
+        db.session.add(cvr)
+
+    # Save Visual Audit Results if applicable
+    visual_audit_info = raw_result.get('visual_audit')
+    if visual_audit_info:
+        var = VisualAuditResult(
+            organization_id=g.organization_id,
+            content_id=content.id,
+            image_url=visual_audit_info.get('image_url') or content.file_url,
+            dominant_colors_json=json.dumps(visual_audit_info.get('dominant_colors', [])),
+            approved_palette_json=json.dumps(visual_audit_info.get('approved_palette', [])),
+            unapproved_colors_json=json.dumps(visual_audit_info.get('unapproved_colors', [])),
+            contrast_warnings_json=json.dumps(visual_audit_info.get('contrast_warnings', []))
+        )
+        db.session.add(var)
+
     content.status = 'ANALYZED'
     
-    # Log Activity
+    # Log Activity with tamper-evident hash chaining
+    last_log = ActivityLog.query.filter_by(organization_id=g.organization_id).order_by(ActivityLog.id.desc()).first()
+    prev_hash = last_log.event_hash if last_log and last_log.event_hash else 'GENESIS_HASH'
+    
     log = ActivityLog(
         organization_id=g.organization_id,
         user_id=g.current_user.id,
         action='RUN_ANALYSIS',
         target_type='Analysis',
         target_id=analysis.id,
+        previous_hash=prev_hash,
         details_json=json.dumps({
             'score': analysis.compliance_score,
             'issues_found': len(issues_list),
+            'claims_verified': len(classified_claims),
             'content_title': content.title
         })
     )
+    log.event_hash = log.calculate_hash(prev_hash)
     db.session.add(log)
     db.session.commit()
 

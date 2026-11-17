@@ -219,6 +219,9 @@ def create_product():
         category=data.get('category', 'Core Solution'),
         specifications=data.get('specifications', ''),
         approved_claims=data.get('approved_claims', ''),
+        verified_benchmarks=data.get('verified_benchmarks', ''),
+        official_sla=data.get('official_sla', ''),
+        prohibited_claims=data.get('prohibited_claims', ''),
         source_doc=data.get('source_doc', ''),
         effective_date=data.get('effective_date', '')
     )
@@ -240,12 +243,17 @@ def manage_product(product_id):
         return jsonify({'message': 'Product information deleted.'})
 
     data = request.get_json(silent=True) or {}
+    from datetime import datetime
     product.product_name = data.get('product_name', product.product_name)
     product.category = data.get('category', product.category)
     product.specifications = data.get('specifications', product.specifications)
     product.approved_claims = data.get('approved_claims', product.approved_claims)
+    product.verified_benchmarks = data.get('verified_benchmarks', product.verified_benchmarks)
+    product.official_sla = data.get('official_sla', product.official_sla)
+    product.prohibited_claims = data.get('prohibited_claims', product.prohibited_claims)
     product.source_doc = data.get('source_doc', product.source_doc)
     product.effective_date = data.get('effective_date', product.effective_date)
+    product.updated_at = datetime.utcnow()
 
     db.session.commit()
     return jsonify({'message': 'Product updated.', 'product': product.to_dict()})

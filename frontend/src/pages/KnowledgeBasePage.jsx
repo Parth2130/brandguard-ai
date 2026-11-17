@@ -46,7 +46,17 @@ export const KnowledgeBasePage = () => {
 
   // Form states
   const [ruleForm, setRuleForm] = useState({ rule_type: 'color', rule_key: '', rule_value: '', description: '', severity: 'high' });
-  const [productForm, setProductForm] = useState({ product_name: '', category: 'Core Product', specifications: '', approved_claims: '', source_doc: '', effective_date: '' });
+  const [productForm, setProductForm] = useState({
+    product_name: '',
+    category: 'Core Product',
+    specifications: '',
+    approved_claims: '',
+    verified_benchmarks: '',
+    official_sla: '',
+    prohibited_claims: '',
+    source_doc: '',
+    effective_date: ''
+  });
   const [guideForm, setGuideForm] = useState({ title: '', category: 'Brand Identity', version: '1.0', raw_text: '', file: null });
   const [assetForm, setAssetForm] = useState({ name: '', asset_type: 'logo', version: 'v1.0', is_active: true, file: null });
   const [companyForm, setCompanyForm] = useState({ name: '', description: '', industry: '', website: '', contact_email: '' });
@@ -116,7 +126,17 @@ export const KnowledgeBasePage = () => {
       await brandsAPI.createProduct(productForm);
       showToast('Product information registered.', 'success');
       setIsProductModalOpen(false);
-      setProductForm({ product_name: '', category: 'Core Product', specifications: '', approved_claims: '', source_doc: '', effective_date: '' });
+      setProductForm({
+        product_name: '',
+        category: 'Core Product',
+        specifications: '',
+        approved_claims: '',
+        verified_benchmarks: '',
+        official_sla: '',
+        prohibited_claims: '',
+        source_doc: '',
+        effective_date: ''
+      });
       loadData();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to create product.', 'error');
@@ -628,14 +648,44 @@ export const KnowledgeBasePage = () => {
                 <div className="p-3.5 rounded-2xl bg-[#F0FDF4] border border-[#BBF7D0]">
                   <div className="text-[10px] font-bold uppercase text-[#166534] mb-1">Approved Marketing Claim</div>
                   <div className="text-xs font-semibold text-[#15803D] leading-relaxed">
-                    "{prod.approved_claims}"
+                    "{prod.approved_claims || 'None registered'}"
                   </div>
                 </div>
 
-                <div className="text-xs text-[#77718A] space-y-1">
-                  <div><strong className="text-[#2E2459]">Specifications:</strong> {prod.specifications}</div>
-                  <div><strong className="text-[#2E2459]">Supporting Source:</strong> {prod.source_doc}</div>
-                  <div><strong className="text-[#2E2459]">Effective Date:</strong> {prod.effective_date}</div>
+                {prod.verified_benchmarks && (
+                  <div className="p-3 rounded-2xl bg-[#EFF6FF] border border-[#BFDBFE]">
+                    <div className="text-[10px] font-bold uppercase text-[#1E40AF] mb-0.5">Verified Performance Benchmark</div>
+                    <div className="text-xs font-semibold text-[#1D4ED8]">
+                      {prod.verified_benchmarks}
+                    </div>
+                  </div>
+                )}
+
+                {prod.official_sla && (
+                  <div className="p-3 rounded-2xl bg-[#F5F3FF] border border-[#DDD6FE]">
+                    <div className="text-[10px] font-bold uppercase text-[#5B21B6] mb-0.5">Official SLA & Guarantees</div>
+                    <div className="text-xs font-semibold text-[#6D28D9]">
+                      {prod.official_sla}
+                    </div>
+                  </div>
+                )}
+
+                {prod.prohibited_claims && (
+                  <div className="p-3 rounded-2xl bg-[#FEF2F2] border border-[#FECACA]">
+                    <div className="text-[10px] font-bold uppercase text-[#991B1B] mb-0.5">Prohibited / Blocked Claims</div>
+                    <div className="text-xs font-semibold text-[#DC2626]">
+                      {prod.prohibited_claims}
+                    </div>
+                  </div>
+                )}
+
+                <div className="text-xs text-[#77718A] space-y-1 pt-1 border-t border-[#E8E3F2]">
+                  <div><strong className="text-[#2E2459]">Specifications:</strong> {prod.specifications || 'N/A'}</div>
+                  <div><strong className="text-[#2E2459]">Supporting Source:</strong> {prod.source_doc || 'Internal Verification'}</div>
+                  <div className="flex justify-between items-center text-[11px] text-[#A09BAC]">
+                    <span>Effective: {prod.effective_date || 'Current'}</span>
+                    {prod.updated_at && <span>Updated: {new Date(prod.updated_at).toLocaleDateString()}</span>}
+                  </div>
                 </div>
               </div>
             ))}
@@ -801,10 +851,44 @@ export const KnowledgeBasePage = () => {
           </div>
 
           <div>
+            <label className="block text-xs font-bold text-[#77718A] uppercase mb-1">Verified Performance Benchmarks</label>
+            <input
+              type="text"
+              placeholder="e.g. 25% performance improvement vs v2 (verified lab benchmark)"
+              value={productForm.verified_benchmarks}
+              onChange={(e) => setProductForm({ ...productForm, verified_benchmarks: e.target.value })}
+              className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-2.5 text-xs text-[#2E2459]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-[#77718A] uppercase mb-1">Official SLA / Guarantees</label>
+              <input
+                type="text"
+                placeholder="e.g. 99.99% uptime, 10ms latency"
+                value={productForm.official_sla}
+                onChange={(e) => setProductForm({ ...productForm, official_sla: e.target.value })}
+                className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-2.5 text-xs text-[#2E2459]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#77718A] uppercase mb-1">Prohibited / Outdated Claims</label>
+              <input
+                type="text"
+                placeholder="e.g. 100% improved performance, zero risk"
+                value={productForm.prohibited_claims}
+                onChange={(e) => setProductForm({ ...productForm, prohibited_claims: e.target.value })}
+                className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-2.5 text-xs text-[#2E2459]"
+              />
+            </div>
+          </div>
+
+          <div>
             <label className="block text-xs font-bold text-[#77718A] uppercase mb-1">Technical Specifications</label>
             <input
               type="text"
-              placeholder="e.g. 10ms latency, 99.99% SLA"
+              placeholder="e.g. Multi-region redundancy, TLS 1.3"
               value={productForm.specifications}
               onChange={(e) => setProductForm({ ...productForm, specifications: e.target.value })}
               className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-2.5 text-xs text-[#2E2459]"

@@ -8,7 +8,10 @@ import {
   XCircle,
   Clock,
   ShieldCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Users,
+  RefreshCw,
+  Calendar
 } from 'lucide-react';
 import {
   BarChart,
@@ -33,6 +36,7 @@ export const AnalyticsPage = () => {
   const [overview, setOverview] = useState(null);
   const [violations, setViolations] = useState(null);
   const [trends, setTrends] = useState([]);
+  const [monthlyTrends, setMonthlyTrends] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const { showToast } = useToast();
@@ -48,6 +52,7 @@ export const AnalyticsPage = () => {
         setOverview(oRes.data);
         setViolations(vRes.data);
         setTrends(tRes.data.trend_points || []);
+        setMonthlyTrends(tRes.data.monthly_trends || []);
       } catch (err) {
         showToast('Failed to load intelligence metrics.', 'error');
       } finally {
@@ -73,10 +78,13 @@ export const AnalyticsPage = () => {
     total_analyzed = 0,
     approved_count = 0,
     rejected_count = 0,
+    changes_requested_count = 0,
     pending_count = 0,
     approval_rate = 100,
     rejection_rate = 0,
-    average_compliance_score = 100
+    changes_requested_rate = 0,
+    average_compliance_score = 100,
+    reviewer_activity = []
   } = overview || {};
 
   const topViolations = violations?.top_violations || [];
@@ -91,7 +99,7 @@ export const AnalyticsPage = () => {
             Brand Intelligence Analytics
           </h1>
           <p className="text-xs text-[#77718A] mt-1">
-            Aggregated brand compliance telemetry, recurring violation trends, and approval velocity.
+            Aggregated brand compliance telemetry, recurring violation trends, reviewer activity, and governance velocity.
           </p>
         </div>
 
@@ -105,7 +113,7 @@ export const AnalyticsPage = () => {
       </div>
 
       {/* High-level KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Average Compliance"
           value={`${average_compliance_score}%`}
@@ -121,9 +129,16 @@ export const AnalyticsPage = () => {
           color="green"
         />
         <StatCard
+          title="Changes Requested"
+          value={`${changes_requested_count}`}
+          subtitle={`${changes_requested_rate}% revision rate`}
+          icon={RefreshCw}
+          color="orange"
+        />
+        <StatCard
           title="Rejection Rate"
           value={`${rejection_rate}%`}
-          subtitle={`${rejected_count} returned for revision`}
+          subtitle={`${rejected_count} rejected assets`}
           icon={XCircle}
           color={rejected_count > 0 ? 'red' : 'purple'}
         />
@@ -132,7 +147,7 @@ export const AnalyticsPage = () => {
           value={pending_count}
           subtitle="Active review workflows"
           icon={Clock}
-          color="orange"
+          color="purple"
         />
       </div>
 
@@ -215,6 +230,56 @@ export const AnalyticsPage = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Reviewer Activity Breakdown Table */}
+      <div className="bg-white rounded-3xl p-6 border border-[#E8E3F2] shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#7C3AED]" />
+              <h3 className="text-sm font-bold text-[#2E2459]">Reviewer Activity & Decision Telemetry</h3>
+            </div>
+            <p className="text-xs text-[#77718A] mt-0.5">
+              Reviewer performance breakdown extracted from real database review logs.
+            </p>
+          </div>
+        </div>
+
+        {reviewer_activity.length === 0 ? (
+          <p className="text-xs text-[#77718A] py-6 text-center">No reviewer activity recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-[#E8E3F2] text-[#77718A] font-semibold uppercase text-[10px]">
+                  <th className="pb-3">Reviewer Name</th>
+                  <th className="pb-3">Role</th>
+                  <th className="pb-3 text-center">Total Reviewed</th>
+                  <th className="pb-3 text-center">Approved</th>
+                  <th className="pb-3 text-center">Changes Requested</th>
+                  <th className="pb-3 text-center">Rejected</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E8E3F2]">
+                {reviewer_activity.map((r, i) => (
+                  <tr key={i} className="hover:bg-[#F8F6FF]/60 transition-colors">
+                    <td className="py-3 font-bold text-[#2E2459]">{r.name}</td>
+                    <td className="py-3">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#EDE9FE] text-[#7C3AED]">
+                        {r.role}
+                      </span>
+                    </td>
+                    <td className="py-3 text-center font-bold text-[#2E2459]">{r.total_reviewed}</td>
+                    <td className="py-3 text-center font-bold text-[#16A34A]">{r.approved}</td>
+                    <td className="py-3 text-center font-bold text-[#D97706]">{r.changes_requested}</td>
+                    <td className="py-3 text-center font-bold text-[#DC2626]">{r.rejected}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Top Recurring Violations Table */}

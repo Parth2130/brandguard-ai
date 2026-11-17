@@ -11,7 +11,11 @@ import {
   History,
   FileText,
   Send,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  CheckCircle2,
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 import { contentAPI, correctionsAPI, reviewsAPI } from '../services/api';
 import { Modal } from '../components/Modal';
@@ -21,6 +25,7 @@ export const SmartSuggestionsPage = () => {
   const { contentId } = useParams();
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [reanalyzing, setReanalyzing] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(null);
   const [customText, setCustomText] = useState('');
@@ -92,6 +97,19 @@ export const SmartSuggestionsPage = () => {
     }
   };
 
+  const handleReanalyze = async () => {
+    setReanalyzing(true);
+    try {
+      const res = await correctionsAPI.reanalyze(contentId);
+      showToast(`Re-analysis complete! Recalculated Compliance Score: ${res.data.new_score}/100`, 'success');
+      loadContent();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Re-analysis failed.', 'error');
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
   const handleSubmitForReview = async () => {
     try {
       await reviewsAPI.submit({
@@ -113,7 +131,6 @@ export const SmartSuggestionsPage = () => {
     return <div className="text-center py-20 text-[#DC2626]">Content draft not found.</div>;
   }
 
-  // Gather suggestions from latest analysis issues
   const latestAnalysis = content.latest_analysis;
   const issues = latestAnalysis?.issues || [];
   const suggestions = issues
@@ -121,6 +138,7 @@ export const SmartSuggestionsPage = () => {
     .filter(Boolean);
 
   const pendingCount = suggestions.filter(s => s.status === 'pending').length;
+  const currentScore = latestAnalysis?.compliance_score ?? 100;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -134,16 +152,25 @@ export const SmartSuggestionsPage = () => {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-2xl font-extrabold text-[#2E2459] tracking-tight">
-              Smart Correction Studio
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-extrabold text-[#2E2459] tracking-tight">
+                Smart Correction Studio
+              </h1>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                currentScore >= 80 ? 'bg-green-100 text-green-700' :
+                currentScore >= 60 ? 'bg-amber-100 text-amber-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                Score: {currentScore}/100
+              </span>
+            </div>
             <p className="text-xs text-[#77718A] mt-0.5">
               Review and apply AI-generated brand corrections side-by-side • {content.title}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {pendingCount > 0 && (
             <button
               onClick={handleApplyAll}
@@ -153,6 +180,16 @@ export const SmartSuggestionsPage = () => {
               Apply All ({pendingCount})
             </button>
           )}
+
+          <button
+            onClick={handleReanalyze}
+            disabled={reanalyzing}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-[#7C3AED] text-[#7C3AED] hover:bg-[#F8F6FF] font-bold text-xs shadow-2xs transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${reanalyzing ? 'animate-spin' : ''}`} />
+            {reanalyzing ? 'Recalculating...' : 'Re-analyze & Recalculate'}
+          </button>
+
           <button
             onClick={handleSubmitForReview}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs shadow-md shadow-[#7C3AED]/20 transition-all"
@@ -219,7 +256,7 @@ export const SmartSuggestionsPage = () => {
             AI Correction Recommendations ({suggestions.length})
           </h3>
           <span className="text-xs text-[#77718A]">
-            {pendingCount} pending action
+            {pendingCount} pending action{pendingCount !== 1 ? 's' : ''}
           </span>
         </div>
 
@@ -341,7 +378,7 @@ export const SmartSuggestionsPage = () => {
               required
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
-              className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-3 text-xs text-[#2E2459] font-mono focus:outline-none focus:ring-1 focus:ring-[#7C3AED]"
+              className="w-full bg-[#F8F6FF] border border-[#EDE9FE] rounded-xl p-3 text-xs text-[#2E2459] font-mono focus:outline-hidden focus:ring-1 focus:ring-[#7C3AED]"
             />
           </div>
 
